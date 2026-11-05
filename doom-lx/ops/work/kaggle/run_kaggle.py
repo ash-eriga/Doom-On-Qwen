@@ -60,6 +60,8 @@ def main():
     ap.add_argument("--dump", default="1-50", help="frame numbers/ranges to capture")
     ap.add_argument("--play", default=PLAY_E1M5, help='"frame key" schedule; frame = rendered no.')
     ap.add_argument("--fresh", action="store_true", help="ignore/overwrite session.pt")
+    ap.add_argument("--bench", action="store_true",
+                    help="run only the warm-up chunk, print the honest tok/s, exit")
     ap.add_argument("--head-block", type=int, default=32768)
     ap.add_argument("--head-vblock", type=int, default=8192)
     a = ap.parse_args()
@@ -260,6 +262,14 @@ def main():
     if r["wrong"] > first * 0.05:
         print(f"FAILING FAST: {r['wrong']} of {first} wrong in the first chunk at token "
               f"{done:,} -- the state did not take", flush=True)
+        return
+    if a.bench:
+        # Measure-and-stop: the warm-up above already includes compilation, so this rate is
+        # the honest planning number. No checkpoint, no frames, nothing written.
+        print(f"BENCH: {first / dt0:.0f} tok/s over {first} tokens on "
+              f"{torch.cuda.get_device_name(0)} (chunk {a.chunk}, head_block {f.head_block}, "
+              f"head_vblock {f.head_vblock}); run cost of 43.6M tokens at this rate: "
+              f"{43_600_000 / (first / dt0) / 3600:.1f} h. Nothing saved.", flush=True)
         return
 
     def flush(upto):
