@@ -27,11 +27,14 @@ from pathlib import Path
 RAM_SIZE = 0x600000        # must match port-lf/doom-lf.ld
 TEXT_END = 0x40000
 
-# Offsets from riscv64-unknown-elf-nm, minus RAM_BASE.
+# Offsets from riscv64-unknown-elf-nm, minus RAM_BASE. These belong to the 320x200 BLOCKS=3
+# build; every other build moves them -- pass --fc-off/--key-off/--demo-off/--fb-off (values
+# from nm on the build's ELF, minus 0x80000000). The framebuffer size follows the build too.
 FC_OFF = 0x562DD0          # qwen_frame_count
 KEY_OFF = 0x562DCC         # qwen_key_state (bit per key)
 DEMO_OFF = 0x4684C0        # qwen_demo_enabled (0 hands control to the host)
 FB_PTR_OFF = 0x4A2D94      # DG_ScreenBuffer (a pointer to the framebuffer)
+FB_W, FB_H = 320, 200
 
 PLAY_E1M5 = ("0 0;1 9;3 25;5 17;36 25;37 17;45 25;46 17;52 25;53 17;58 25;60 17;67 25;68 17;"
              "70 25;71 17;72 25;73 17;74 24;76 16")
@@ -103,6 +106,12 @@ def main():
     ap.add_argument("--price-per-hour", type=float, default=0.0)
     ap.add_argument("--emit", action="store_true",
                     help="CPU only: build the circuit from --data/doom-lf.elf into --work/packed.pt")
+    ap.add_argument("--fc-off", default="0x562DD0", help="qwen_frame_count offset (nm - RAM_BASE)")
+    ap.add_argument("--key-off", default="0x562DCC", help="qwen_key_state offset")
+    ap.add_argument("--demo-off", default="0x4684C0", help="qwen_demo_enabled offset")
+    ap.add_argument("--fb-off", default="0x4A2D94", help="DG_ScreenBuffer offset")
+    ap.add_argument("--fb-w", type=int, default=320, help="framebuffer width")
+    ap.add_argument("--fb-h", type=int, default=200, help="framebuffer height")
     ap.add_argument("--head-block", type=int, default=32768)
     ap.add_argument("--head-vblock", type=int, default=8192)
     a = ap.parse_args()
@@ -110,6 +119,13 @@ def main():
     if a.emit:
         emit(a)
         return
+
+    global FC_OFF, KEY_OFF, DEMO_OFF, FB_PTR_OFF, FB_W, FB_H
+    FC_OFF = int(a.fc_off, 0)
+    KEY_OFF = int(a.key_off, 0)
+    DEMO_OFF = int(a.demo_off, 0)
+    FB_PTR_OFF = int(a.fb_off, 0)
+    FB_W, FB_H = a.fb_w, a.fb_h
 
     data, work = Path(a.data), Path(a.work)
     outdir = Path(a.outdir or work / "weights-frames")
@@ -268,8 +284,8 @@ def main():
     def grab(m):
         """The framebuffer as a PPM, following the pointer the guest set up."""
         fb = struct.unpack_from("<I", m.ram, FB_PTR_OFF)[0] - S.RAM_BASE
-        out = bytearray(b"P6\n320 200\n255\n")
-        for v in bytes(m.ram[fb:fb + 320 * 200]):
+        out = bytearray(f"P6\n{FB_W} {FB_H}\n255\n".encode())
+        for v in bytes(m.ram[fb:fb + FB_W * FB_H]):
             out += pal[3 * v:3 * v + 3]
         return bytes(out)
 

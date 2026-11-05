@@ -1,0 +1,14 @@
+# recorded by fastemu-lf --autopilot; frame mask
+0 0
+1 1
+40 9
+46 8
+73 0
+87 16
+88 4
+97 8
+101 24
+102 16
+104 5
+120 21
+121 1
