@@ -62,6 +62,9 @@ def main():
     ap.add_argument("--fresh", action="store_true", help="ignore/overwrite session.pt")
     ap.add_argument("--bench", action="store_true",
                     help="run only the warm-up chunk, print the honest tok/s, exit")
+    ap.add_argument("--budget-dollars", type=float, default=0.0,
+                    help="with --price-per-hour: trim the trace so the run fits this budget")
+    ap.add_argument("--price-per-hour", type=float, default=0.0)
     ap.add_argument("--head-block", type=int, default=32768)
     ap.add_argument("--head-vblock", type=int, default=8192)
     a = ap.parse_args()
@@ -297,6 +300,20 @@ def main():
             firsts += r["first_wrong"]
         k += 1
         el = time.time() - t0
+        if k == 1 and a.budget_dollars and a.price_per_hour:
+            # First steady chunk = the honest rate (the warm-up above spent its time compiling).
+            # Whatever does not fit the budget is cut here, on chunk boundaries, and the frames
+            # beyond the cut are dropped, so every frame promised is a frame fully verified.
+            rate1 = len(seg) / max(el, 1e-9)
+            remain = a.budget_dollars * 3600.0 / a.price_per_hour - (time.time() - t_start)
+            afford = max(0, int(rate1 * remain * 0.9))
+            cut = a.chunk + (afford // a.chunk) * a.chunk
+            if cut < len(pre):
+                for fc in [fc for fc in ppm if at[fc] > cut]:
+                    del ppm[fc], at[fc]
+                print(f"budget: {rate1:.0f} tok/s steady, {remain:.0f}s left -> cutting to "
+                      f"{cut:,} tokens, {len(ppm)} frames kept", flush=True)
+                pre = pre[:cut]
         if k % report == 0:
             print(f"  {done + n:,}/{done + len(pre):,} verified, {(n - first) / el:.0f} tok/s, "
                   f"{el:.0f}s, {wrong} wrong, {time.time() - t_start:.0f}s/{cap:.0f}s",
