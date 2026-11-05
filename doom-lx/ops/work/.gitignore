@@ -1,0 +1,5 @@
+__pycache__/
+colabauth/
+runs/
+snap-*.pkl
+*.pyc

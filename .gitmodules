@@ -1,0 +1,4 @@
+[submodule "doom-lx/port"]
+	path = doom-lx/port
+	url = https://github.com/ash-eriga/qwenputer-doom.git
+	branch = main
