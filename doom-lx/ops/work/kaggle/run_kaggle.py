@@ -47,6 +47,42 @@ def _palette(wad_path):
     raise SystemExit("PLAYPAL not found")
 
 
+def emit(a):
+    """Stream the circuit for the ELF in --data into packed.pt (pure CPU, ~7 min). Run this on a
+    cheap CPU job when the build changes; a GPU job then only loads. Same code as modal_doom's
+    emit stage."""
+    import torch
+    for p in (Path(a.lxsrc) / "lx", Path(a.lxsrc)):
+        sys.path.insert(0, str(p))
+    import cb
+    cb.RAM_SIZE, cb.TEXT_END = RAM_SIZE, TEXT_END
+    cb.ELF = Path(a.data) / "doom-lf.elf"
+    from lx import core, hf
+    t0 = time.time()
+    c = core.build(core.Config(ram_size=RAM_SIZE, text_end=TEXT_END))
+    lay = hf.pick_layout(len(c.dims))
+    tc = cb._tc(c, lay)
+    print(f"circuit {c.stats()} hidden {lay.hidden} layers {c.n_layers()} "
+          f"({time.time() - t0:.0f}s)", flush=True)
+    t0 = time.time()
+    model, f = cb.stream_fast(c, lay, tc)
+    tot = sum(cb._packed_bytes(g) + cb._packed_bytes(ml) for g, ml in f.layers)
+    print(f"streamed {time.time() - t0:.0f}s, packed nonzeros {tot / 2**30:.2f} GiB", flush=True)
+    blob = {
+        "gdn": [{k: getattr(g, k) for k in g.__dataclass_fields__} for g, _ in f.layers],
+        "mlp": [{k: getattr(m, k) for k in m.__dataclass_fields__} for _, m in f.layers],
+        "head_cols": f.head_cols,
+        "w_head": f.w_head,
+        "sd": {k: v for k, v in model.state_dict().items()
+               if v is not None and v.device.type != "meta"},
+        "tc": tc,
+        "meta": {"nk": f.nk, "nv": f.nv, "kd": f.kd, "vd": f.vd, "n_chip": f.n_chip},
+    }
+    out = Path(a.work) / "packed.pt"
+    torch.save(blob, out)
+    print(f"wrote {out} {out.stat().st_size / 2**30:.2f} GiB", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="/kaggle/input/doom-lx", help="dir with packed.pt, "
@@ -65,9 +101,15 @@ def main():
     ap.add_argument("--budget-dollars", type=float, default=0.0,
                     help="with --price-per-hour: trim the trace so the run fits this budget")
     ap.add_argument("--price-per-hour", type=float, default=0.0)
+    ap.add_argument("--emit", action="store_true",
+                    help="CPU only: build the circuit from --data/doom-lf.elf into --work/packed.pt")
     ap.add_argument("--head-block", type=int, default=32768)
     ap.add_argument("--head-vblock", type=int, default=8192)
     a = ap.parse_args()
+
+    if a.emit:
+        emit(a)
+        return
 
     data, work = Path(a.data), Path(a.work)
     outdir = Path(a.outdir or work / "weights-frames")
