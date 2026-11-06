@@ -57,7 +57,11 @@ def emit(a):
     import torch
     for p in (Path(a.lxsrc) / "lx", Path(a.lxsrc)):
         sys.path.insert(0, str(p))
-    import cb
+    print("EMIT DEBUG: lxsrc =", a.lxsrc, "exists =", Path(a.lxsrc).exists(), flush=True)
+    print("EMIT DEBUG: dir =", sorted(p.name for p in Path(a.lxsrc).iterdir()), flush=True)
+    print("EMIT DEBUG: sys.path =", sys.path, flush=True)
+    import colab_bench as cb   # the file is colab_bench.py; "import cb" only worked on Modal,
+                               # which mounted it renamed to cb.py
     cb.RAM_SIZE, cb.TEXT_END = RAM_SIZE, TEXT_END
     cb.ELF = Path(a.data) / "doom-lf.elf"
     from lx import core, hf
@@ -112,6 +116,9 @@ def main():
     ap.add_argument("--fb-off", default="0x4A2D94", help="DG_ScreenBuffer offset")
     ap.add_argument("--fb-w", type=int, default=320, help="framebuffer width")
     ap.add_argument("--fb-h", type=int, default=200, help="framebuffer height")
+    ap.add_argument("--packed", default=None,
+                    help="packed.pt to load (default DATA/packed.pt; the emit+verify flow points "
+                    "this at the freshly emitted WORK/packed.pt)")
     ap.add_argument("--head-block", type=int, default=32768)
     ap.add_argument("--head-vblock", type=int, default=8192)
     a = ap.parse_args()
@@ -131,7 +138,7 @@ def main():
     outdir = Path(a.outdir or work / "weights-frames")
     elf = data / "doom-lf.elf"
     wad = data / "doom1.wad"
-    packed_pt = data / "packed.pt"
+    packed_pt = Path(a.packed) if a.packed else data / "packed.pt"
     resume = work / "session.pt"
     for p in (elf, wad, packed_pt):
         if not p.exists():
@@ -148,7 +155,7 @@ def main():
         if cbp.exists():
             sys.path.insert(0, str(cand))
             break
-    import cb
+    import colab_bench as cb
     cb.RAM_SIZE, cb.TEXT_END = RAM_SIZE, TEXT_END
     cb.ELF = elf
 
@@ -289,40 +296,47 @@ def main():
             out += pal[3 * v:3 * v + 3]
         return bytes(out)
 
-    # The proposer: tokens from where the model's state ends, and the pixels they encode.
+    # The proposer, interleaved with the verifier. The machine may only run a bounded window
+    # (BUF tokens) ahead of the verified frontier: a session saved while the proposer is far
+    # ahead captures the machine at the END of the trace with n at the frontier -- internally
+    # inconsistent, and resuming from it lands in the wrong ground (v7 and v10's failure).
     # ``at`` is the token index each frame first appeared at: a frame is the model's only when
     # every one of those tokens has been verified.
-    t0 = time.time()
-    toks, ppm, at, last = [], {}, {}, -1
-    while len(toks) < a.ntok and not tracem.halted:
-        fc = struct.unpack_from("<I", tracem.ram, FC_OFF)[0]
-        tick(tracem, fc, last)
-        last = fc
-        if fc in wanted and fc not in at:
-            at[fc] = done + len(toks)
-            ppm[fc] = grab(tracem)
-        toks.extend(tracem.step())
-    tpi = (done + len(toks)) / max(tracem.instret, 1)
-    print(f"{len(toks):,} new tokens proposed in {time.time() - t0:.1f}s "
-          f"(machine at {tracem.instret:,} instructions, {tpi:.3f} tok/instr), "
-          f"frames {min(at) if at else '-'}..{max(at) if at else '-'}", flush=True)
+    BUF = 4 * a.chunk
+    pre = []
+    ppm, at = {}, {}
+    last = -1
+    instret0 = tracem.instret
+    target = s.n + a.ntok
 
-    torch.cuda.synchronize()
-    pre = toks
+    def propose_until(abs_target):
+        """Step the machine until the buffer reaches abs_target absolute tokens (or it halts)."""
+        nonlocal last
+        while s.n + len(pre) < abs_target and not tracem.halted:
+            fc = struct.unpack_from("<I", tracem.ram, FC_OFF)[0]
+            tick(tracem, fc, last)
+            last = fc
+            if fc in wanted and fc not in at:
+                at[fc] = s.n + len(pre)
+                ppm[fc] = grab(tracem)
+            pre.extend(tracem.step())
 
     # torch.compile compiles one kernel set per shape, so time the compiler separately.
+    propose_until(s.n + BUF)
     t0 = time.time()
-    r = s.verify(pre[:a.chunk])
+    seg = pre[:a.chunk]
+    r = s.verify(seg)
+    del pre[:a.chunk]
     torch.cuda.synchronize()
     dt0 = time.time() - t0
-    first = min(a.chunk, len(pre))
+    first = len(seg)
     print(f"warm-up {first} tokens in {dt0:.1f}s (includes compilation), "
           f"{r['wrong']} wrong, {first / dt0:.0f} tok/s", flush=True)
     if r["wrong"]:
         print("  first wrong:", r["first_wrong"][:3], flush=True)
     if r["wrong"] > first * 0.05:
         print(f"FAILING FAST: {r['wrong']} of {first} wrong in the first chunk at token "
-              f"{done:,} -- the state did not take", flush=True)
+              f"{s.n:,} -- the state did not take", flush=True)
         return
     if a.bench:
         # Measure-and-stop: the warm-up above already includes compilation, so this rate is
@@ -343,58 +357,58 @@ def main():
                 saved.append(fc)
         return saved
 
-    n, wrong, firsts = first, r["wrong"], list(r["first_wrong"])
+    wrong, firsts = r["wrong"], list(r["first_wrong"])
+    n0 = s.n
+    last_saved = s.n
     t0 = time.time()
     stop = "end"
     k = 0
     report = max(1, 1_000_000 // a.chunk)
     save_every = max(1, 2_000_000 // a.chunk)
-    while a.chunk + (k + 1) * a.chunk <= len(pre):
-        seg = pre[a.chunk + k * a.chunk:a.chunk + (k + 1) * a.chunk]
-        r = s.verify(seg)
-        wrong += r["wrong"]
-        n += len(seg)
-        if r["wrong"]:
-            firsts += r["first_wrong"]
-        k += 1
-        el = time.time() - t0
-        if k == 1 and a.budget_dollars and a.price_per_hour:
-            # First steady chunk = the honest rate (the warm-up above spent its time compiling).
-            # Whatever does not fit the budget is cut here, on chunk boundaries, and the frames
-            # beyond the cut are dropped, so every frame promised is a frame fully verified.
-            rate1 = len(seg) / max(el, 1e-9)
-            remain = a.budget_dollars * 3600.0 / a.price_per_hour - (time.time() - t_start)
-            afford = max(0, int(rate1 * remain * 0.9))
-            cut = a.chunk + (afford // a.chunk) * a.chunk
-            if cut < len(pre):
-                for fc in [fc for fc in ppm if at[fc] > cut]:
-                    del ppm[fc], at[fc]
-                print(f"budget: {rate1:.0f} tok/s steady, {remain:.0f}s left -> cutting to "
-                      f"{cut:,} tokens, {len(ppm)} frames kept", flush=True)
-                pre = pre[:cut]
-        if k % report == 0:
-            print(f"  {done + n:,}/{done + len(pre):,} verified, {(n - first) / el:.0f} tok/s, "
-                  f"{el:.0f}s, {wrong} wrong, {time.time() - t_start:.0f}s/{cap:.0f}s",
-                  flush=True)
-        if k % save_every == 0:
-            flush(done + n)
-            s.save(str(resume))
+    while s.n < target and not tracem.halted:
         if time.time() - t_start > cap:
             stop = "budget"
-            print(f"  stopping at the time cap with {n:,} of {len(pre):,} tokens", flush=True)
+            print(f"  stopping at the time cap at token {s.n:,}", flush=True)
             break
-    if stop == "end" and n < len(pre):
-        tail = pre[n:]
-        r = s.verify(tail)
+        # fill the window, then verify it down to (almost) empty
+        propose_until(s.n + BUF)
+        while len(pre) >= a.chunk:
+            seg = pre[:a.chunk]
+            del pre[:a.chunk]
+            r = s.verify(seg)
+            wrong += r["wrong"]
+            if r["wrong"]:
+                firsts += r["first_wrong"]
+            k += 1
+            el = time.time() - t0
+            if k % report == 0:
+                print(f"  {s.n:,}/{target:,} verified, {(s.n - n0) / el:.0f} tok/s, "
+                      f"{el:.0f}s, {wrong} wrong, {time.time() - t_start:.0f}s/{cap:.0f}s",
+                      flush=True)
+            if time.time() - t_start > cap:
+                stop = "budget"
+                print(f"  stopping at the time cap at token {s.n:,}", flush=True)
+                break
+        if stop != "end":
+            break
+        # safe checkpoint moment: the machine sits exactly at the verified frontier
+        if s.n - last_saved >= 2_000_000:
+            flush(s.n)
+            s.save(str(resume))
+            last_saved = s.n
+
+    if stop == "end" and pre:
+        r = s.verify(pre)
+        del pre[:]
         wrong += r["wrong"]
-        n += len(tail)
         if r["wrong"]:
             firsts += r["first_wrong"]
     torch.cuda.synchronize()
     dt = time.time() - t0
-    ran = n - first
+    ran = s.n - n0
     rate = ran / dt if dt else 0
-    print(f"VERIFIED to token {done + n:,} ({ran:,} this run), {wrong} wrong, stop={stop}",
+    tpi = (s.n - done) / max(tracem.instret - instret0, 1)
+    print(f"VERIFIED to token {s.n:,} ({ran:,} this run), {wrong} wrong, stop={stop}",
           flush=True)
     print(f"  {rate:.0f} tok/s, {rate / tpi:.0f} guest instr/s, "
           f"{torch.cuda.max_memory_allocated() / 2**30:.2f} GiB peak", flush=True)
@@ -402,10 +416,9 @@ def main():
     if firsts:
         print(f"  first wrong: {firsts[:6]}", flush=True)
 
+    flush(s.n)
     s.save(str(resume))
-    saved = flush(done + n)
-    print(f"saved state at token {done + n:,}; {len(saved)} frames written this run -> {outdir}",
-          flush=True)
+    print(f"saved state at token {s.n:,}; -> {outdir}", flush=True)
 
 
 if __name__ == "__main__":
