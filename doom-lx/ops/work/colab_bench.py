@@ -19,9 +19,10 @@ import struct
 import sys
 import time
 from pathlib import Path
+from paths import ELF_FILE, LX
 
 # the local checkout, or the clone on the Colab VM
-for _p in ("/content/lxsrc/lx", "<home>/repos/linuxformer/lx"):
+for _p in ("/content/lxsrc/lx", LX):
     if os.path.isdir(_p):
         sys.path.insert(0, _p)
         break
@@ -38,7 +39,7 @@ TEXT_END = 0x40000
 RAM_SIZE = 0x580000
 ELF = Path(os.environ.get("DOOM_ELF", "/content/doom-lf.elf"))
 if not ELF.exists():
-    ELF = Path("<repo>/doom-lx/port/build/doom-lf.elf")
+    ELF = Path(ELF_FILE)
 
 
 def _check_bf16(name: str, t: torch.Tensor, rows: int = 4096) -> None:
