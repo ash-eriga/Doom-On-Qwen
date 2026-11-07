@@ -42,19 +42,20 @@ than one long `exec`.
 
 ## Budget by tokens, not by constants
 
-This is the number that matters, and it is build-specific:
+These are the measured totals, not a prediction from a constant:
 
-| build | instr/frame | tokens/frame | boot | tokens to frame 121 |
-|---|---|---|---|---|
-| 96x60 | 226,105 | 341 k | 7.1 M | ~48 M |
-| 192x120 | 459,923 | 694 k | 7.6 M | **~106 M** |
+| build | instr/frame (`fastemu-lf`) | tokens verified, frames 6-121 | runs needed |
+|---|---|---|---|
+| 96x60 | 226,105 | 64.7M | 2 (6..82, then 83..121) |
+| 192x120 | 459,923 | **106.1M** | 3 (95.0M, +6.0M, +5.0M) |
 
-`fastemu-lf` prints the instruction count; multiply by the tokens-per-instruction that build
-reports. For 192x120 the real ratio is **1.606**, not the 1.5087 constant that earlier notes used,
-which is why a 95 M budget stops at frame 119 and needs two resumes.
+Instructions per frame grow 2.03x for 4x the pixels: the engine dominates and pixel work is the
+minority.
 
-Doubling the resolution quadruples the pixels but costs only ~2x per frame: the engine dominates
-and pixel work is the minority.
+The trap is tokens per instruction. The 192x120 build measures **1.606**, not the 1.5087 constant
+earlier notes used. Budgeting 95M from the old constant stops at frame 119, which is exactly what
+happened and why two resumes were needed. Use `--bench` on a fresh VM or read the first 1M-token
+line of the run, then size `NTOK` from the real rate.
 
 ## Measured throughput
 

@@ -82,6 +82,34 @@ token names the row, the `VAL` token after it carries the value, and `STEP` ends
 Nothing here needed a new layer type: the computer's memory is the same Gated DeltaNet
 recurrence Qwen3.5 already uses for language.
 
+## Doom
+
+<p align="center">
+  <img src="docs/doom-e1m5-in-weights.webp" alt="Doom E1M5 rendered by an RV32IM machine running inside Qwen3.5-4B's weights." width="100%">
+</p>
+
+<p align="center"><sub>E1M5, frames 6-121. The CPU is a RV32IM core whose weights were compiled, not trained. Every frame matches the reference emulator byte for byte.</sub></p>
+
+The CPU gets a much bigger program than arithmetic: the Doom engine. [`doom-lx/`](doom-lx) is that
+port, built for the [linuxformer](https://github.com/itsrealranky/linuxformer) LX machine and run
+inside Qwen3.5-4B as a verified trace.
+
+| clip | frames | verified | GPU | tokens |
+|---|---|---|---|---|
+| **192x120** | 116 | **116/116 byte-exact** | A100 40GB, 19,109 tok/s | 106.1M |
+| 96x60 | 116 | **116/116 byte-exact** | L40S, 17,700 tok/s | 64.7M |
+
+The check is not "does it look like Doom". A native emulator (`fastemu-lf`) renders reference
+frames from the same ELF and key schedule, and every frame is compared byte for byte on its PPM
+payload. A frame is only written once every token that produced it has verified against the
+reference machine.
+
+Two things we got wrong, on the record: the circuit does **not** predict every token (450 misses
+in 106.1M at 192x120, 1,023 in 64.7M at 96x60, always one-value-off pairs), and an intermediate
+reading that put the A100 below the L40S was measured on mismatched artifacts. Full trail in
+[`doom-lx/ops/work/STATE.md`](doom-lx/ops/work/STATE.md); how to reproduce it in
+[`doom-lx/README.md`](doom-lx/README.md).
+
 ## In-weights NPU (experimental)
 
 The CPU can run neural networks too. The model is up as
@@ -295,3 +323,8 @@ If you use Qwenputer in your work, please cite it. GitHub's "Cite this repositor
 The code is MIT. The model weights are Apache-2.0, as a modified version of
 [Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B): the config is widened and computer
 layers are added, but Qwen's own weights are unchanged.
+
+The Doom port in [`doom-lx/`](doom-lx) is the exception: it links Doom and DoomGeneric, both
+GPL-2.0, so built artifacts of that port are governed by the GPL rather than by the MIT license
+above. See [`doom-lx/CREDITS.md`](doom-lx/CREDITS.md).
+
