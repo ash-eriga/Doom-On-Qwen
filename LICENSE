@@ -22,3 +22,7 @@ SOFTWARE.
 
 The CHIP-8 ROMs in games/roms are not covered by this license. Each belongs to
 its author; see games/ATTRIBUTION.md.
+
+The Doom port under doom-lx/ links GPL-2.0 code (Doom, © id Software;
+doomgeneric, © ozkl). Built artifacts of that port are governed by the GPL, not
+by this license. See doom-lx/CREDITS.md.
