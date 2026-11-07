@@ -3,10 +3,13 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
-/roms/
-/engine/target/
+
+# run state: checkpoints, frames, logs. The drivers are tracked, the output is not.
+doom-lx/ops/work/runs/*.log
+doom-lx/ops/work/*.log
 *.safetensors
-/model/
-/games/sources/
-/games/shots/
-/dist/
+packed.pt
+session*.pt
+
+# scratch
+/tmp/

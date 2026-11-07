@@ -103,7 +103,9 @@ rounding boundary in the fast path rather than a state-space error.
 
 ## Attribution
 
-The code here is the project's own. The things it stands on are not, and are credited in
-`../../CREDITS.md`: Doom and doomgeneric (GPL-2.0, © id Software / ozkl / Chocolate Doom
-contributors), the Qwen3.5 base model and the Qwenputer weights (divagr1925), and the Python
-stack (`torch`, `transformers`, `flash-linear-attention`).
+The code here is the project's own. What it stands on is not: Doom and DoomGeneric (GPL-2.0,
+© id Software / ozkl / Chocolate Doom contributors), the **LX machine from linuxformer** (MIT), and
+**base Qwen3.5-4B** (Apache-2.0) as the weights the circuit is emitted into. The emit technique is
+lineage from Qwenputer (MIT, Divyansh Agrawal); its checkpoint is not used here. Full chain in
+`../../CREDITS.md`.
+
