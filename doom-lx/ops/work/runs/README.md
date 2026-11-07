@@ -96,16 +96,16 @@ linear prefix. `screenblocks=11` builds render at the full viewport width, so re
 
 ## Known open item
 
-About **4.2e-6 of predictions are wrong** (394 + 28 + 28 over 106.1 M tokens). They do not affect
-the frames, which are byte-exact, but they retire any claim that the circuit predicts *every*
-token. The pattern is narrow: one-value-off pairs (`65536`/`65537`, `65557`), which points at a
-rounding boundary in the fast path rather than a state-space error.
+About **4.2e-6 of predictions are wrong** at 192x120 (394 + 28 + 28 over 106.1 M tokens) and
+**1.6e-5** at 96x60 (277 + 746 over 64.7 M). The frames are unaffected, but this retires any claim
+that the circuit predicts *every* token. The pattern is narrow: one-value-off pairs
+(`65536`/`65537`, `65557`), which points at a rounding boundary in the fast path rather than a
+state-space error.
 
 ## Attribution
 
-The code here is the project's own. What it stands on is not: Doom and DoomGeneric (GPL-2.0,
-© id Software / ozkl / Chocolate Doom contributors), the **LX machine from linuxformer** (MIT), and
-**base Qwen3.5-4B** (Apache-2.0) as the weights the circuit is emitted into. The emit technique is
-lineage from Qwenputer (MIT, Divyansh Agrawal); its checkpoint is not used here. Full chain in
-`../../CREDITS.md`.
+The code here is this project's own. It links Doom and DoomGeneric (**GPL-2.0**, © id Software /
+ozkl / Chocolate Doom contributors), runs on the LX machine from **linuxformer** (MIT), and is
+emitted into **base Qwen3.5-4B** (Apache-2.0). The emit technique comes from Qwenputer by Divyansh
+Agrawal (MIT); this project does not load its checkpoint. Full chain in `../../CREDITS.md`.
 

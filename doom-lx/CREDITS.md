@@ -1,6 +1,6 @@
 # What this project is built on
 
-This repo is the Doom port. It sits on three things it did not write: a machine, a set of base
+This repo is the Doom port. It depends on three things it did not write: a machine, a set of base
 weights, and a game. Getting that dependency chain right matters more than the credits list, so
 it comes first.
 
@@ -13,25 +13,24 @@ Doom-On-Qwen  (this repo, MIT)
 │                    executable spec; lx.fast is the kernel
 ├── the base weights Qwen/Qwen3.5-4B                           Apache-2.0
 │                    widened layers; the circuit is emitted into these
-└── lineage          Qwenputer, by Divyansh Agrawal            MIT
-                     `lx/emit.py` states it derives from
+└── the emit method  Qwenputer, by Divyansh Agrawal            MIT
+                     `lx/emit.py` says it derives from
                      Qwenputer's `chipformer.q35.emit`
 ```
 
-**What is ours:** the Doom→LX port (`port-lf/`), the native emulator (`native/fastemu-lf.c`), the
+**Ours:** the Doom→LX port (`port-lf/`), the native emulator (`native/fastemu-lf.c`), the
 verification and run pipeline (`ops/work/`), the measurements in `ops/work/STATE.md`, and the
 clips.
 
-**What is explicitly not ours:** everything in the four rows above. This repo does not contain the
-Qwenputer model, its checkpoint, or its source tree.
+**Not ours:** everything in the four rows above. This repo does not contain the Qwenputer model, its
+checkpoint, or its source tree.
 
-## Correction to an earlier version of this file
+## What is not loaded
 
-An earlier version said the emitted circuit "is derived from the Qwenputer weights" and that the
-circuit runs on "the Qwenputer CPU". Both are wrong. The circuit is built with `lx.core.build`
-from **linuxformer**, into **base Qwen3.5-4B** layers. The Qwenputer checkpoint
-(`divagr1925/Qwen3.5-4B-Qwenputer`) is not loaded at any point. Qwenputer's role is the emit
-technique that `lx` was derived from.
+Easy to get wrong, so stated plainly: the Qwenputer checkpoint
+(`divagr1925/Qwen3.5-4B-Qwenputer`) is never loaded, and this repo contains neither it nor its
+source tree. The circuit is built by `lx.core.build` from **linuxformer** and emitted into **base
+Qwen3.5-4B** layers. From Qwenputer this project takes the emit method only.
 
 ## Doom
 
@@ -55,8 +54,8 @@ governed by the GPL, not by this repo's MIT license.
 
 - **Qwen3.5-4B** — © Alibaba Qwen team, **Apache-2.0**,
   <https://huggingface.co/Qwen/Qwen3.5-4B>. The base weights the circuit is emitted into.
-- **Qwenputer** — Divyansh Agrawal, **MIT**, <https://github.com/divagr18/qwenputer>. Lineage for
-  the emit technique only; its checkpoint is not used here.
+- **Qwenputer** — Divyansh Agrawal, **MIT**, <https://github.com/divagr18/qwenputer>. Source of the
+  emit method; its checkpoint is not used here.
 
 ## Prior art
 
