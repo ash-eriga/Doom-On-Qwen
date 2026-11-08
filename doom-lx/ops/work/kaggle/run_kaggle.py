@@ -57,9 +57,6 @@ def emit(a):
     import torch
     for p in (Path(a.lxsrc) / "lx", Path(a.lxsrc)):
         sys.path.insert(0, str(p))
-    print("EMIT DEBUG: lxsrc =", a.lxsrc, "exists =", Path(a.lxsrc).exists(), flush=True)
-    print("EMIT DEBUG: dir =", sorted(p.name for p in Path(a.lxsrc).iterdir()), flush=True)
-    print("EMIT DEBUG: sys.path =", sys.path, flush=True)
     import colab_bench as cb   # the file is colab_bench.py; "import cb" only worked on Modal,
                                # which mounted it renamed to cb.py
     cb.RAM_SIZE, cb.TEXT_END = RAM_SIZE, TEXT_END
