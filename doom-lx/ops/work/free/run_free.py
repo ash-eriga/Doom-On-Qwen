@@ -186,14 +186,16 @@ def main():
         s.next, s.last, s.n, s.waiting = d["next"], d["last"], d["n"], d["waiting"]
         s.ref = d["ref"]
         pre, ppm, at, last_fc, saved = d["pre"], d["ppm"], d["at"], d["lastfc"], d["saved"]
-        inp = d["inp"]
+        inp, preds, idx = d["inp"], d["preds"], d["idx"]
+        free_since, free_start = d["free_since"], d["free_start"]
         print(f"resumed at token {s.n:,}", flush=True)
     else:
         if a.fresh and ckpt.exists():
             ckpt.unlink()
         s = SS.Session(c, model, m0, a.chunk, 0, f)
         pre, ppm, at, last_fc, saved = [], {}, {}, -1, set()
-        inp = None
+        inp = preds = free_since = free_start = None
+        idx = 0
     tracem = s.ref
     ro = Readout(c, s.cache, RK_palette(str(wad)), FB_PTR_OFF, FB_W, FB_H)
     GO = S.tok("GO")
@@ -215,6 +217,7 @@ def main():
     def propose_until(abs_target):
         """Reference tokens up to abs_target — mismatch logging only (the guest drives
         itself through the baked schedule; the runner feeds the model nothing but GO)."""
+        nonlocal last_fc
         while s.n + len(pre) < abs_target and not tracem.halted:
             fc = struct.unpack_from("<I", tracem.ram, FC_OFF)[0]
             if fc != last_fc:
@@ -225,14 +228,19 @@ def main():
 
     def step_chunk(inp):
         """One chunked pass on chip-token ids; returns the next predictions (list)."""
-        e = model.model.embed_tokens(torch.tensor([inp], device="cuda") + s.offset)
+        t = torch.tensor([inp])
+        if t.dtype not in (torch.int64, torch.int32):
+            print(f"BAD DTYPE {t.dtype}: {type(inp[0])} {inp[:3]}", flush=True)
+            raise SystemExit(1)
+        e = model.model.embed_tokens(t.to("cuda") + s.offset)
         return f.head_argmax(f.forward(e, s.cache)[0]).tolist()
 
     def save_all():
         torch.save({"state": [(cs.cpu(), rs.cpu()) for cs, rs in s._state()],
                     "next": s.next, "last": s.last, "n": s.n, "waiting": s.waiting,
                     "ref": tracem, "pre": pre, "at": at, "ppm": ppm, "lastfc": last_fc,
-                    "saved": saved, "inp": inp}, ckpt)
+                    "saved": saved, "inp": inp, "preds": preds, "idx": idx,
+                    "free_since": free_since, "free_start": free_start}, ckpt)
 
     def frames_from_state():
         """The model's current frame, read out of the GDN state, md5'd against the oracle."""
@@ -248,30 +256,45 @@ def main():
         print(f"  frame {fc} from state: "
               f"{'MATCH' if d == want else 'MISMATCH ' + d}", flush=True)
 
-    inp = inp or [GO]
+    inp = None  # the next input chunk (None: not built yet)
     wrong, firsts = 0, []
     t0 = time.time()
     free_since = None
+    free_start = None
     last_ckpt = s.n
+    idx = s.n  # absolute index of the next token to feed (0 = GO; index k >= 1 = pre[k-1])
     while s.n < target and not tracem.halted:
         if time.time() - t_start > cap:
             print("  stopping at the time cap", flush=True)
             break
-        propose_until(s.n + BUF + len(inp))
-        preds = step_chunk(inp)
-        for i in range(len(inp)):  # diagnostics: the model ran on its own predictions
-            j = s.n + i + 1
-            if j < len(pre) and preds[i] != pre[j]:
+        propose_until(s.n + BUF + a.chunk)
+        if free_since is None:
+            if at and free_start is None:
+                free_start = -(-min(at.values()) // a.chunk) * a.chunk
+                print(f"frame {min(at)} starts at token {min(at.values()):,}; "
+                      f"free-run from the chunk boundary {free_start:,}", flush=True)
+            if free_start is not None and idx >= free_start:
+                free_since = idx
+                print(f"free-run from token {idx:,} ({time.time() - t0:.0f}s in)", flush=True)
+        if free_since is None:
+            # burn-in: teacher-forced chunks. pre[k] is absolute index s.n+k; the chunk
+            # feeds absolute [idx, idx+C), i.e. pre[0:C] with GO at index 0.
+            inp = [GO] + pre[0:a.chunk - 1] if idx == 0 else pre[0:a.chunk]
+            fed_go = idx == 0
+        else:
+            inp = preds  # the model's own predictions for indices [idx, idx+C)
+            fed_go = False
+        preds = step_chunk(inp)  # predictions for indices [idx+1, idx+len(inp))
+        for i in range(len(inp)):  # diagnostics: pre index of abs token (s.n+i+1) shifts by
+            k = i + 1 - (1 if fed_go else 0)  # one while GO (not a proposer token) is in play
+            if k < len(pre) and preds[i] != pre[k]:
                 wrong += 1
                 if len(firsts) < 8:
-                    firsts.append((j, pre[j], preds[i]))
+                    firsts.append((s.n + i + 1, pre[k], preds[i]))
         s.n += len(inp)
+        idx += len(inp)
         s.next = preds[-1]
-        del pre[:len(inp)]
-        if free_since is None and any(v <= s.n for v in at.values()):
-            free_since = s.n
-            print(f"free-run from token {s.n:,} ({time.time() - t0:.0f}s in)", flush=True)
-        inp = preds
+        del pre[:len(inp) - (1 if fed_go else 0)]  # GO is not a proposer token
         frames_from_state()
         if wanted and saved >= wanted:
             print("all wanted frames are in; stopping", flush=True)
@@ -301,13 +324,9 @@ def main():
 
 
 def RK_palette(wad_path):
-    """The Doom palette as run_kaggle's _palette builds it (import without running main)."""
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "run_kaggle", Path(__file__).resolve().parents[1] / "kaggle" / "run_kaggle.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod._palette(wad_path)
+    """The Doom palette as run_kaggle's _palette builds it (the module ships in lxsrc)."""
+    import run_kaggle
+    return run_kaggle._palette(wad_path)
 
 
 if __name__ == "__main__":

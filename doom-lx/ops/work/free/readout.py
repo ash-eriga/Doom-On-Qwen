@@ -65,7 +65,7 @@ class Readout:
             st = self.cache.layers[L].recurrent_states[0]  # (1, nv, kd, vd)
             wi = w[sel] & (RAM_BLOCK_WORDS - 1)
             bits = st[0, j * self.r + (wi & 7), wi >> 3, BIT_COLS].float()  # (n, 32)
-            out[sel] = (bits > THRESH).long() @ POW.to(dev)
+            out[sel] = ((bits > THRESH).double() @ POW.double().to(dev)).long()
             done |= sel
         if not done.all():
             raise KeyError(f"words {w[~done].tolist()[:4]} are in no RAM block "
