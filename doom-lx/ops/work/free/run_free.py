@@ -27,8 +27,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import paths; paths.add_lx()
-import colab_bench as cb
+try:
+    import paths; paths.add_lx()  # the dev checkout's lx path; on Colab --lxsrc is used
+except ImportError:
+    pass
 
 
 def payload_md5(ppm: bytes) -> str:
