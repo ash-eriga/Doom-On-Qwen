@@ -58,6 +58,7 @@ Emit the circuit for your build on CPU first, which takes about 11 minutes. It i
 different `.text` bytes are a different weight set. For the 192x120 ELF the result is a 4.08 GiB
 `packed.pt` with md5 `5e3c5affb7f16fbcdb267d992ae63af0`; the ELF's md5 is
 `ff4ad5641ef0e7a000ed5536a6cddd93`.
+Emitting with the pinned linuxformer commit reproduces that `packed.pt` md5 exactly.
 
 ```bash
 python doom-lx/ops/work/kaggle/run_kaggle.py --emit \
