@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 OPS = Path(__file__).resolve().parent          # .../doom-lx/ops/work
-REPO = OPS.parents[2]                          # .../doom-lx  ->  repo root is one above
+REPO = OPS.parents[2] if len(OPS.parents) > 2 else OPS   # a shallow dir such as /content/lxsrc has no third parent
 DOOMLX = OPS.parent.parent                     # .../doom-lx
 PORT = DOOMLX / "port"
 ELF_FILE = PORT / "build" / "doom-lf.elf"

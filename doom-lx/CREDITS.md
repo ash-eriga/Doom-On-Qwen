@@ -5,9 +5,10 @@ weights, and a game. Getting that dependency chain right matters more than the c
 it comes first.
 
 ```
-Doom-On-Qwen  (this repo, MIT)
+Doom-On-Qwen  (this repo, 0BSD)
 ├── the guest        Doom + DoomGeneric                        GPL-2.0
-│                    ported for LX in ash-eriga/qwenputer-doom
+│                    ported for LX in ash-eriga/qwenputer-doom,
+│                    a fork of Franzferdinan51/qwenputer-doom
 ├── the machine      linuxformer, package `lx`                 MIT
 │                    LX: RV32IM + Zba. lx.ref.Machine is the
 │                    executable spec; lx.fast is the kernel
@@ -19,8 +20,8 @@ Doom-On-Qwen  (this repo, MIT)
 ```
 
 **Ours:** the Doom→LX port (`port-lf/`), the native emulator (`native/fastemu-lf.c`), the
-verification and run pipeline (`ops/work/`), the measurements in `ops/work/STATE.md`, and the
-clips.
+verification and run pipeline (`ops/work/`), the reference frame hashes and checker (`oracle/`),
+and the clips.
 
 **Not ours:** everything in the four rows above. This repo does not contain the Qwenputer model, its
 checkpoint, or its source tree.
@@ -40,8 +41,14 @@ Qwen3.5-4B** layers. From Qwenputer this project takes the emit method only.
 - **Chocolate Doom contributors** — DoomGeneric carries derived code. **GPL-2.0**.
 - `doom1.wad` is the **shareware** episode, freely redistributable. It is not commercial game data.
 
+- **qwenputer-doom** — the port repo is a fork of
+  [Franzferdinan51/qwenputer-doom](https://github.com/Franzferdinan51/qwenputer-doom), whose first
+  five commits are kept with their authorship. That upstream repo declares no license, so the files
+  it contributed (the original port, `native/fastemu.c`, `live/`) are theirs and are not covered by
+  this repo's 0BSD. Everything added on top (`port-lf/`, `native/fastemu-lf.c`, `oracle/`) is ours.
+
 `port-lf/build.sh` links this GPL-2.0 code. Built or redistributed binaries of that port are
-governed by the GPL, not by this repo's MIT license.
+governed by the GPL, not by this repo's 0BSD license.
 
 ## The machine
 
@@ -60,7 +67,7 @@ governed by the GPL, not by this repo's MIT license.
 ## Prior art
 
 - **Bobliuuu/qwen-os** — a Doom demo running in-weights on a different machine. Not a dependency;
-  named because `ops/work/STATE.md` §11 compares against it.
+  named for context.
 
 ## Python and toolchain
 
@@ -78,11 +85,10 @@ governed by the GPL, not by this repo's MIT license.
 The per-frame key schedule (`sched.txt`) was recorded by `fastemu-lf --autopilot` playing E1M5,
 not captured from a human session, and it replays deterministically. The reference frames used as
 the verification oracle come from `fastemu-lf` on the same ELF and schedule, so they are
-reproducible without any GPU time.
+reproducible without any GPU (`oracle/sched.txt`, `oracle/oracle-192x120.md5`).
 
 ## If you publish the clips
 
 State plainly that the pixels are read out of the reference machine's RAM while it proposes the
 trace, and that the circuit is verified to predict that same token stream. The frames are **not** a
-reconstruction from the model's own predictions. That distinction is in `ops/work/STATE.md` §10 and
-it still holds.
+reconstruction from the model's own predictions.

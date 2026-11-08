@@ -2,7 +2,7 @@
 
 This is the operational half of doom-lx: it takes an emitted circuit plus a Doom ELF and produces
 verified frames on a rented GPU. Everything here was used for the two clips in
-`../STATE.md` sections 13-16.
+the top-level README.
 
 ## What is in this directory
 
@@ -22,8 +22,10 @@ verified frames on a rented GPU. Everything here was used for the two clips in
        python ../kaggle/run_kaggle.py --emit --data <dir with doom-lf.elf> --lxsrc <lxsrc> --work <out>
 
 2. **A dataset holding the artifacts.** `colab_run.py` reads them from one HF dataset repo:
-   `packed-*.pt`, `doom-lf-*.elf`, `doom1.wad`, `lxsrc.zip`, `sched.txt`.
-   `lxsrc.zip` is the linuxformer `lx` package plus `run_kaggle.py` and `colab_bench.py`.
+   `packed-*.pt`, `doom-lf-*.elf`, `doom1.wad`, `lxsrc.zip`, `sched.txt` (`../../../oracle/sched.txt`).
+   `lxsrc.zip` is the output of `../make_lxsrc.sh` (the pinned linuxformer `lx` directory plus
+   `run_kaggle.py`, `colab_bench.py` and `paths.py`), zipped from inside that directory:
+   `(cd lxsrc && zip -qr ../lxsrc.zip .)`.
 
 3. **`HF_TOKEN` with write access** to that dataset, plus `HF_DATASET=<owner>/<dataset>`.
 
