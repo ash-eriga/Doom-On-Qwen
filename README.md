@@ -29,6 +29,15 @@ given the same ELF and key schedule, byte for byte. All 116 frames of both clips
 come from the reference machine's framebuffer; the circuit's part is predicting the instruction
 stream that draws them.
 
+## Specs
+
+| | |
+|---|---|
+| **GPU** | NVIDIA A100 40GB, 18.75 GiB peak |
+| **Speed** | ~19,100 tokens/s, about 12,000 guest instructions/s (~12 kHz) |
+| **CPU** | RV32IM + Zba, emitted into 55 layers of Qwen3.5-4B |
+| **RAM** | 6 MiB, held in the Gated DeltaNet state (plus 256 KiB of code) |
+
 ## Check the frames
 
 [`doom-lx/oracle/`](doom-lx/oracle) has the md5 of every reference frame of the 192x120 build
